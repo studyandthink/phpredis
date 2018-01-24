@@ -25,7 +25,7 @@
 #define PHP_REDIS_H
 
 /* phpredis version */
-#define PHP_REDIS_VERSION "2.2.8-rc1"
+#define PHP_REDIS_VERSION "develop"
 
 PHP_METHOD(Redis, __construct);
 PHP_METHOD(Redis, __destruct);
@@ -46,6 +46,7 @@ PHP_METHOD(Redis, renameNx);
 PHP_METHOD(Redis, getMultiple);
 PHP_METHOD(Redis, exists);
 PHP_METHOD(Redis, delete);
+PHP_METHOD(Redis, unlink);
 PHP_METHOD(Redis, incr);
 PHP_METHOD(Redis, incrBy);
 PHP_METHOD(Redis, incrByFloat);
@@ -108,13 +109,13 @@ PHP_METHOD(Redis, pttl);
 PHP_METHOD(Redis, persist);
 PHP_METHOD(Redis, info);
 PHP_METHOD(Redis, select);
+PHP_METHOD(Redis, swapdb);
 PHP_METHOD(Redis, move);
 PHP_METHOD(Redis, zAdd);
 PHP_METHOD(Redis, zDelete);
 PHP_METHOD(Redis, zRange);
 PHP_METHOD(Redis, zRevRange);
 PHP_METHOD(Redis, zRangeByScore);
-PHP_METHOD(Redis, zRangeByLex);
 PHP_METHOD(Redis, zRevRangeByScore);
 PHP_METHOD(Redis, zRangeByLex);
 PHP_METHOD(Redis, zRevRangeByLex);
@@ -174,6 +175,7 @@ PHP_METHOD(Redis, hIncrBy);
 PHP_METHOD(Redis, hIncrByFloat);
 PHP_METHOD(Redis, hMset);
 PHP_METHOD(Redis, hMget);
+PHP_METHOD(Redis, hStrLen);
 
 PHP_METHOD(Redis, multi);
 PHP_METHOD(Redis, discard);
@@ -237,8 +239,6 @@ PHP_METHOD(Redis, getMode);
 
 PHP_MINIT_FUNCTION(redis);
 PHP_MSHUTDOWN_FUNCTION(redis);
-PHP_RINIT_FUNCTION(redis);
-PHP_RSHUTDOWN_FUNCTION(redis);
 PHP_MINFO_FUNCTION(redis);
 
 /* Redis response handler function callback prototype */
@@ -246,9 +246,6 @@ typedef void (*ResultCallback)(INTERNAL_FUNCTION_PARAMETERS,
     RedisSock *redis_sock, zval *z_tab, void *ctx);
 
 PHP_REDIS_API int redis_connect(INTERNAL_FUNCTION_PARAMETERS, int persistent);
-
-PHP_REDIS_API void generic_sort_cmd(INTERNAL_FUNCTION_PARAMETERS, char *sort, 
-    int use_alpha);
 
 PHP_REDIS_API void generic_subscribe_cmd(INTERNAL_FUNCTION_PARAMETERS, char *sub_cmd);
 
@@ -265,26 +262,10 @@ PHP_REDIS_API int redis_sock_read_multibulk_multi_reply_loop(
     INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock, zval *z_tab, 
     int numElems);
 
-/* pipeline */
-PHP_REDIS_API request_item* get_pipeline_head(zval *object);
-PHP_REDIS_API void set_pipeline_head(zval *object, request_item *head);
-PHP_REDIS_API request_item* get_pipeline_current(zval *object);
-PHP_REDIS_API void set_pipeline_current(zval *object, request_item *current);
-
 #ifndef _MSC_VER
 ZEND_BEGIN_MODULE_GLOBALS(redis)
 ZEND_END_MODULE_GLOBALS(redis)
 #endif
-
-struct redis_queued_item {
-    /* reading function */
-    zval * (*fun)(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock, ...);
-
-    char *cmd; 
-    int cmd_len;
-
-    struct redis_queued_item *next;
-};
 
 extern zend_module_entry redis_module_entry;
 

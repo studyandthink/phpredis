@@ -10,8 +10,13 @@
 #define REDIS_CLUSTER_MOD   (REDIS_CLUSTER_SLOTS-1)
 
 /* Get attached object context */
+#if (PHP_MAJOR_VERSION < 7)
 #define GET_CONTEXT() \
     ((redisCluster*)zend_object_store_get_object(getThis() TSRMLS_CC))
+#else
+#define GET_CONTEXT() \
+    ((redisCluster *)((char *)Z_OBJ_P(getThis()) - XtOffsetOf(redisCluster, std)))
+#endif
 
 /* Command building/processing is identical for every command */
 #define CLUSTER_BUILD_CMD(name, c, cmd, cmd_len, slot) \
@@ -47,14 +52,12 @@
 
 /* Reset anything flagged as MULTI */
 #define CLUSTER_RESET_MULTI(c) \
-    redisClusterNode **_node; \
-    for(zend_hash_internal_pointer_reset(c->nodes); \
-        zend_hash_get_current_data(c->nodes, (void**)&_node); \
-        zend_hash_move_forward(c->nodes)) \
-    { \
-        (*_node)->sock->watching = 0; \
-        (*_node)->sock->mode     = ATOMIC; \
-    } \
+    redisClusterNode *_node; \
+    ZEND_HASH_FOREACH_PTR(c->nodes, _node) { \
+        if (_node == NULL) break; \
+        _node->sock->watching = 0; \
+        _node->sock->mode = ATOMIC; \
+    } ZEND_HASH_FOREACH_END(); \
     c->flags->watching = 0; \
     c->flags->mode     = ATOMIC; \
 
@@ -101,12 +104,18 @@
 /* For the creation of RedisCluster specific exceptions */
 PHP_REDIS_API zend_class_entry *rediscluster_get_exception_base(int root TSRMLS_DC);
 
+#if (PHP_MAJOR_VERSION < 7)
 /* Create cluster context */
-zend_object_value create_cluster_context(zend_class_entry *class_type 
-                                         TSRMLS_DC);
-
+zend_object_value create_cluster_context(zend_class_entry *class_type TSRMLS_DC);
 /* Free cluster context struct */
 void free_cluster_context(void *object TSRMLS_DC);
+#else
+/* Create cluster context */
+zend_object *create_cluster_context(zend_class_entry *class_type TSRMLS_DC);
+/* Free cluster context struct */
+void free_cluster_context(zend_object *object);
+#endif
+
 
 /* Inittialize our class with PHP */
 void init_rediscluster(TSRMLS_D);
@@ -121,6 +130,7 @@ PHP_METHOD(RedisCluster, mset);
 PHP_METHOD(RedisCluster, msetnx);
 PHP_METHOD(RedisCluster, mset);
 PHP_METHOD(RedisCluster, del);
+PHP_METHOD(RedisCluster, unlink);
 PHP_METHOD(RedisCluster, dump);
 PHP_METHOD(RedisCluster, setex);
 PHP_METHOD(RedisCluster, psetex);
@@ -182,6 +192,7 @@ PHP_METHOD(RedisCluster, hincrby);
 PHP_METHOD(RedisCluster, hincrbyfloat);
 PHP_METHOD(RedisCluster, hset);
 PHP_METHOD(RedisCluster, hsetnx);
+PHP_METHOD(RedisCluster, hstrlen);
 PHP_METHOD(RedisCluster, incr);
 PHP_METHOD(RedisCluster, decr);
 PHP_METHOD(RedisCluster, incrby);

@@ -11,7 +11,7 @@
 
 /* Macro for setting the slot if we've been asked to */
 #define CMD_SET_SLOT(slot,key,key_len) \
-    if(slot) *slot = cluster_hash_key(key,key_len);
+    if (slot) *slot = cluster_hash_key(key,key_len);
 
 /* Simple container so we can push subscribe context out */
 typedef struct subscribeContext {
@@ -28,16 +28,10 @@ typedef enum geoSortType {
     SORT_DESC
 } geoSortType;
 
-/* GEORADIUS and GEORADIUSBYMEMBER options */
-/*typedef struct geoRadiusOpts = {
-    int withcoord;
-    int withdist;
-    int withhash;
-    geoSortType sort;
-};*/
-
 /* Construct a raw command */
-int redis_build_raw_cmd(zval **z_args, int argc, char **cmd, int *cmd_len TSRMLS_DC);
+int redis_build_raw_cmd(zval *z_args, int argc, char **cmd, int *cmd_len TSRMLS_DC);
+/* Construct a script command */
+smart_string *redis_build_script_cmd(smart_string *cmd, int argc, zval *z_args);
 
 /* Redis command generics.  Many commands share common prototypes meaning that
  * we can write one function to handle all of them.  For example, there are
@@ -68,6 +62,9 @@ int redis_key_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
     char *kw, char **cmd, int *cmd_len, short *slot, void **ctx);
 
 int redis_key_long_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
+    char *kw, char **cmd, int *cmd_len, short *slot, void **ctx);
+
+int redis_long_long_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
     char *kw, char **cmd, int *cmd_len, short *slot, void **ctx);
 
 int redis_key_long_long_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
@@ -116,6 +113,9 @@ int redis_zrangebylex_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
 int redis_gen_zlex_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
     char *kw, char **cmd, int *cmd_len, short *slot, void **ctx);
 
+int redis_eval_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
+    char *kw, char **cmd, int *cmd_len, short *slot, void **ctx);
+
 /* Commands which need a unique construction mechanism.  This is either because
  * they don't share a signature with any other command, or because there is 
  * specific processing we do (e.g. verifying subarguments) that make them
@@ -143,6 +143,9 @@ int redis_hmget_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
     char **cmd, int *cmd_len, short *slot, void **ctx);
 
 int redis_hmset_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
+    char **cmd, int *cmd_len, short *slot, void **ctx);
+
+int redis_hstrlen_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
     char **cmd, int *cmd_len, short *slot, void **ctx);
 
 int redis_bitop_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock, 
@@ -203,7 +206,13 @@ int redis_object_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
     REDIS_REPLY_TYPE *rtype, char **cmd, int *cmd_len, short *slot,
     void **ctx);
 
+int redis_exists_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
+    char **cmd, int *cmd_len, short *slot, void **ctx);
+
 int redis_del_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
+    char **cmd, int *cmd_len, short *slot, void **ctx);
+
+int redis_unlink_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
     char **cmd, int *cmd_len, short *slot, void **ctx);
 
 int redis_watch_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
@@ -237,7 +246,7 @@ int redis_command_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
     char **cmd, int *cmd_len, short *slot, void **ctx);
 
 int redis_fmt_scan_cmd(char **cmd, REDIS_SCAN_TYPE type, char *key, int key_len,
-                       long it, char *pat, int pat_len, long count);
+    long it, char *pat, int pat_len, long count);
 
 int redis_geodist_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
     char **cmd, int *cmd_len, short *slot, void **ctx);
@@ -246,6 +255,9 @@ int redis_georadius_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
     char **cmd, int *cmd_len, short *slot, void **ctx);
 
 int redis_georadiusbymember_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
+    char **cmd, int *cmd_len, short *slot, void **ctx);
+
+int redis_migrate_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
     char **cmd, int *cmd_len, short *slot, void **ctx);
 
 /* Commands that don't communicate with Redis at all (such as getOption, 
@@ -266,4 +278,4 @@ void redis_unserialize_handler(INTERNAL_FUNCTION_PARAMETERS,
 
 #endif
 
-/* vim: set tabstop=4 softtabstops=4 noexpandtab shiftwidth=4: */
+/* vim: set tabstop=4 softtabstop=4 expandtab shiftwidth=4: */

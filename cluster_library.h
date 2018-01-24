@@ -48,24 +48,24 @@
 /* Compare redirection slot information with what we have */
 #define CLUSTER_REDIR_CMP(c) \
     (SLOT_SOCK(c,c->redir_slot)->port != c->redir_port || \
-    strlen(SLOT_SOCK(c,c->redir_slot)->host) != c->redir_host_len || \
-    memcmp(SLOT_SOCK(c,c->redir_slot)->host,c->redir_host,c->redir_host_len))
+    ZSTR_LEN(SLOT_SOCK(c,c->redir_slot)->host) != c->redir_host_len || \
+    memcmp(ZSTR_VAL(SLOT_SOCK(c,c->redir_slot)->host),c->redir_host,c->redir_host_len))
 
 /* Lazy connect logic */
 #define CLUSTER_LAZY_CONNECT(s) \
     if(s->lazy_connect) { \
         s->lazy_connect = 0; \
-        redis_sock_server_open(s, 1 TSRMLS_CC); \
+        redis_sock_server_open(s TSRMLS_CC); \
     }
 
 /* Clear out our "last error" */
-#define CLUSTER_CLEAR_ERROR(c) \
-    if(c->err) { \
-        efree(c->err); \
+#define CLUSTER_CLEAR_ERROR(c) do { \
+    if (c->err) { \
+        zend_string_release(c->err); \
         c->err = NULL; \
-        c->err_len = 0; \
     } \
-    c->clusterdown = 0;
+    c->clusterdown = 0; \
+} while (0)
 
 /* Protected sending of data down the wire to a RedisSock->stream */
 #define CLUSTER_SEND_PAYLOAD(sock, buf, len) \
@@ -89,7 +89,7 @@
     if(CLUSTER_IS_ATOMIC(c)) { \
         RETURN_FALSE; \
     } else { \
-        add_next_index_bool(c->multi_resp, 0); \
+        add_next_index_bool(&c->multi_resp, 0); \
         return; \
     }
 
@@ -102,7 +102,7 @@
             RETURN_FALSE; \
         } \
     } else { \
-        add_next_index_bool(c->multi_resp, b); \
+        add_next_index_bool(&c->multi_resp, b); \
     }
 
 /* Helper to respond with a double or add it to our MULTI response */
@@ -110,15 +110,15 @@
     if(CLUSTER_IS_ATOMIC(c)) { \
         RETURN_DOUBLE(d); \
     } else { \
-        add_next_index_double(c->multi_resp, d); \
+        add_next_index_double(&c->multi_resp, d); \
     }
 
 /* Helper to return a string value */
 #define CLUSTER_RETURN_STRING(c, str, len) \
     if(CLUSTER_IS_ATOMIC(c)) { \
-        RETURN_STRINGL(str, len, 0); \
+        RETVAL_STRINGL(str, len); \
     } else { \
-        add_next_index_stringl(c->multi_resp, str, len, 0); \
+        add_next_index_stringl(&c->multi_resp, str, len); \
     } \
 
 /* Return a LONG value */
@@ -126,7 +126,7 @@
     if(CLUSTER_IS_ATOMIC(c)) { \
         RETURN_LONG(val); \
     } else { \
-        add_next_index_long(c->multi_resp, val); \
+        add_next_index_long(&c->multi_resp, val); \
     }
 
 /* Macro to clear out a clusterMultiCmd structure */
@@ -151,7 +151,7 @@ typedef enum CLUSTER_REDIR_TYPE {
 typedef int  (*mbulk_cb)(RedisSock*,zval*,long long, void* TSRMLS_DC);
 
 /* Specific destructor to free a cluster object */
-// void redis_destructor_redis_cluster(zend_rsrc_list_entry *rsrc TSRMLS_DC);
+// void redis_destructor_redis_cluster(zend_resource *rsrc TSRMLS_DC);
 
 /* A Redis Cluster master node */
 typedef struct redisClusterNode {
@@ -173,8 +173,9 @@ typedef struct clusterFoldItem clusterFoldItem;
 
 /* RedisCluster implementation structure */
 typedef struct redisCluster {
-    /* Object reference for Zend */
+#if (PHP_MAJOR_VERSION < 7)
     zend_object std;
+#endif
 
     /* Timeout and read timeout (for normal operations) */
     double timeout;
@@ -211,14 +212,13 @@ typedef struct redisCluster {
     char multi_len[REDIS_CLUSTER_SLOTS];
 
     /* Variable to store MULTI response */
-    zval *multi_resp;
+    zval multi_resp;
 
     /* Flag for when we get a CLUSTERDOWN error */
     short clusterdown;
 
     /* The last ERROR we encountered */
-    char *err;
-    int err_len;
+    zend_string *err;
 
     /* The slot our command is operating on, as well as it's socket */
     unsigned short cmd_slot;
@@ -244,6 +244,11 @@ typedef struct redisCluster {
     int                redir_host_len;
     unsigned short     redir_slot;
     unsigned short     redir_port;
+
+#if (PHP_MAJOR_VERSION >= 7)
+    /* Zend object handler */
+    zend_object std;
+#endif
 } redisCluster;
 
 /* RedisCluster response processing callback */
@@ -303,8 +308,8 @@ typedef struct clusterMultiCmd {
     int argc;
 
     /* The full command, built into cmd, and args as we aggregate */
-    smart_str cmd;
-    smart_str args;
+    smart_string cmd;
+    smart_string args;
 } clusterMultiCmd;
 
 /* Hiredis like structure for processing any sort of reply Redis Cluster might
@@ -329,7 +334,7 @@ void cluster_free_reply(clusterReply *reply, int free_data);
 HashTable *cluster_dist_create();
 void cluster_dist_free(HashTable *ht);
 int cluster_dist_add_key(redisCluster *c, HashTable *ht, char *key, 
-    int key_len, clusterKeyVal **kv);
+    strlen_t key_len, clusterKeyVal **kv);
 void cluster_dist_add_val(redisCluster *c, clusterKeyVal *kv, zval *val 
     TSRMLS_DC);
 
@@ -422,7 +427,7 @@ PHP_REDIS_API void cluster_mbulk_assoc_resp(INTERNAL_FUNCTION_PARAMETERS,
 PHP_REDIS_API void cluster_multi_mbulk_resp(INTERNAL_FUNCTION_PARAMETERS,
     redisCluster *c, void *ctx);
 PHP_REDIS_API zval *cluster_zval_mbulk_resp(INTERNAL_FUNCTION_PARAMETERS, 
-    redisCluster *c, int pull, mbulk_cb cb);
+    redisCluster *c, int pull, mbulk_cb cb, zval *z_ret);
 
 /* Handlers for things like DEL/MGET/MSET/MSETNX */
 PHP_REDIS_API void cluster_del_resp(INTERNAL_FUNCTION_PARAMETERS, 
@@ -460,4 +465,4 @@ int mbulk_resp_loop_assoc(RedisSock *redis_sock, zval *z_result,
 
 #endif
 
-/* vim: set tabstop=4 softtabstops=4 noexpandtab shiftwidth=4: */
+/* vim: set tabstop=4 softtabstop=4 expandtab shiftwidth=4: */
